@@ -1,0 +1,217 @@
+---
+title: "ASM - Module 3 Solutions"
+author: "Michal Siwek"
+date: "Thursday, November 05, 2015"
+output:
+    pdf_document
+---
+
+## Task 1
+### a) Viewing the model output
+```{r}
+attach(trees)
+fit1 <- lm(Volume ~ Girth)
+fit2 <- lm(Volume ~ Height)
+names(fit1)
+fit1$coefficients
+fit1$fitted.values
+fit1$residuals
+```
+### b) Viewing the fitted model summary
+```{r}
+summary(fit1)
+names(summary(fit1))
+```
+### c) Plots
+```{r}
+par(mfrow = c(1, 2))
+plot(Girth, Volume)
+abline(fit1)
+plot(Height, Volume)
+abline(fit2)
+```
+
+### d) Comparing $R^2$ values
+```{r}
+data.frame(r.squared = c(summary(fit1)$r.squared, summary(fit2)$r.squared),
+           row.names = c(fit1$call, fit2$call))
+```
+$R^2$ is much lower for the second model.
+
+### e) Are the relationships statistically significant?
+```{r}
+summary(fit1)
+summary(fit2)
+```
+Assuming that the linear model is correct (it's likely not, as the residual plot
+shows a nonlinear pattern) we can say that in the absence of any other predictors
+Girth and Heights (each separately) turns out to be significant for the Volume.
+However there may be other relevant predictors that may change this conclusion
+if included in the models. So it's imporant to decide whether there are any
+possible confounders that are omitted in each of these two models.
+
+### f) Confidence interval for the slope coefficient
+Derivation using scalar formulas:
+```{r}
+n <- nrow(trees)
+p <- 2
+df <- n - p
+b0 <- fit1$coefficients["(Intercept)"]
+b1 <- fit1$coefficients["Girth"]
+sigSq <- sum(fit1$residuals^2) / (n - p)
+var_b1 <- sigSq * (1 / sum((Girth - mean(Girth))^2))
+b1 + c(-1, 1) * sqrt(var_b1) * qt(.975, df)
+```
+Derivation using matrices (variance-covariance matrix):
+```{r}
+xMat <- matrix(c(rep(1, length(Girth)), Girth), ncol = 2)
+vcm <- (summary(fit1)$sigma)^2 * solve(t(xMat) %*% xMat)
+vcm <- matrix(vcm, ncol = 2,
+              dimnames = list(c("(Intercept)", "Girth"), c("(Intercept)", "Girth")))
+b1 + c(-1, 1) * sqrt(vcm["Girth", "Girth"]) * qt(.975, df)
+```
+The same using summary(fit):
+```{r}
+b1 + c(-1, 1) * summary(fit1)$sigma *
+    sqrt(summary(fit1)$cov.unscaled["Girth", "Girth"]) * qt(.975, df)
+```
+The same using confint function:
+```{r}
+confint(fit1)["Girth",]
+```
+### g) Estimated variance of the tree volume
+```{r}
+summary(fit1)$sigma^2
+```
+### h) Predicting $Volume$ for $Girth = 15$ inch
+Using estimated coefficients:
+```{r}
+unname(b0 + b1 * 15)
+```
+Using predict function:
+```{r}
+unname(predict(fit1, newdata = data.frame(Girth = 15)))
+detach(trees)
+```
+## Task 2
+Preparing the data:
+```{r}
+file <- "anscombe_quartet.txt"
+data <- read.table(file, header = T)
+n <- nrow(data)
+m <- ncol(data) / 2  # number of pairs of data (potential relationships)
+allX <- data[,grep("^X", colnames(data))]
+allY <- data[,grep("^Y", colnames(data))]
+```
+### a) Fitting LS lines
+```{r}
+fit <- list()
+for(i in 1:m)
+    fit <- c(fit, list(lm(allY[, i] ~ allX[, i])))
+```
+### b) Models' outputs comparison
+```{r}
+sapply(1:m, function(i) {
+        setNames(c(fit[[i]]$coefficients,
+                   summary(fit[[i]])$r.squared,
+                   cor(allX[, i], allY[, i])),
+                 c("b0", "b1", "R^2", "cor"))
+    })
+```
+All the respective values are very close to each other.
+
+### c) Plots
+```{r}
+par(mfrow = c(2, 2))
+for(i in 1:m) {
+    plot(allX[, i], allY[, i], main = paste("pair", i))
+    abline(fit[[i]])
+}
+```
+Fitting the linear model is reasonable in the **case #1**.
+In **case #3** there's one high-leverage outlier - this one data point has a big impact
+on the slope estimation. Linear model is a reasonable solution in this case if
+this one point is an error. Then we should remove it before fitting the model.
+**Case #2** shows nonlinear relationship.
+In **case #4** almost all data lay at one value of $X$. Putting aside the one outlaying point
+there's no variation in $X$'s so we can't infere anything about the impact of $X$ on $Y$.
+Here the regression hinges on just one outlaying data point and shouldn't be considered reliable.
+
+## Task 3
+Preparing the data and fitting the model with all avaliable predictors:
+```{r}
+file <- "realest.txt"
+data <- read.table(file, header = T)
+fit <- lm(Price ~ ., data)
+```
+### a) Impact of the number of bedrooms on the house price
+```{r}
+summary(fit)
+```
+In the full model, adding one bedroom decreases the expected house price by 7.76.
+```{r}
+fit1 <- lm(Price ~ Bedroom, data)
+summary(fit1)
+```
+In the minimal model, adding one bedroom increases the expected house price by 3.92.  
+These two conclusions are contradictory. The reason behind this might be that
+the size of the house is cought by four variables ($Bedroom, Space, Room, Bathroom$)
+that are positively correlated with each other:
+```{r}
+cor(data[,c("Bedroom", "Space", "Room", "Bathroom")])
+```
+My guess is that the the price increases with the size of the house,
+so if bathroom is the only predictor then it serves as the measure for the house size.
+When all predictors are included, the the other ones give better meausure of the house size
+and hence are better predictors of the impact of the house size on the price.
+In the full model the bathroom coefficient measures the impact of additional bathroom
+keeping the size of the house (i.e. number of rooms, bedrooms, the total space) intact.
+The sign of the estimated coefficient would suggest that
+there are more houses having too many than too few bathrooms considering market demand
+and thus on average additional bathroom have a negative impact on the price.
+
+### b) Prediction
+```{r}
+new_house <- data.frame(Condition = 1,
+                        Bedroom = 3,
+                        Room = 8,
+                        Bathroom = 2,
+                        Garage = 1,
+                        Space = 1500,
+                        Lot = 40,
+                        Tax = 1000)
+```
+Mean value response prediction:
+```{r}
+predict(fit, new_house, interval = "confidence")
+```
+Value of the response prediction:
+```{r}
+predict(fit, new_house, interval = "prediction")
+```
+## Task 4
+Preparing the data and fitting the models:
+```{r}
+file <- "cheese.txt"
+data <- read.table(file, header = T)
+fit1 <- lm(taste ~ Acetic, data)
+fit2 <- lm(taste ~ Acetic + Lactic + H2S, data)
+summary(fit1)
+summary(fit2)
+```
+### $F$-test for testing hypothesis that the smaller model fits better the data than the large one
+Step by step derivation of the p-value:
+```{r}
+n <- nrow(data)
+q <- 2
+p <- 4
+ESS1 <- sum(fit1$residuals^2)
+ESS2 <- sum(fit2$residuals^2)
+F_stat <- ((ESS1 - ESS2) / (p - q)) / (ESS2 / (n - p))
+pf(F_stat, p - q, n - p, lower.tail = F)
+```
+Obtaining the p-value using anova function:
+```{r}
+anova(fit1, fit2)
+```
+At the significance level of $0.05$ we reject the null hypothesis that the smaller model is better.

@@ -1,0 +1,109 @@
+---
+title: "ASM - Module 4 Solutions"
+author: "Michal Siwek"
+date: "Monday, November 16, 2015"
+output: pdf_document
+---
+
+## Task 3
+Collecting data and fitting the model:
+```{r}
+file <- "realest.txt"
+data <- read.table(file, header = T)
+fit <- lm(Price ~ ., data = data)
+```
+### a) Diagnostic plots
+```{r}
+par(mfrow = c(2, 2))
+plot(fit, which = 1:4)
+```
+
+**Residual plot** shows heteroscedasticity - the variance is higher for lower fitted values, and decreases as the fitted values increase. **Normal QQ plot** indicates the distribution of residuals has lighter tails than the normal distribution. **Cook's distance plot** indicates some outlying influential observations, especially observation 8, but also 11 and 6.
+
+### b) Outliers
+Based on the heuristic rule we conclude that there are three outliers:
+```{r}
+res <- rstudent(fit)
+res[abs(res) > 2]
+```
+### c) Influential observations
+Observations having highest Cook's distance:
+```{r}
+cook <- cooks.distance(fit)
+cook[order(cook, decreasing = T)][1:3]
+```
+Influential observation according to the heuristinc rule for the values of leverage:
+```{r}
+hat <- hatvalues(fit)
+threshold <- 2 * sum(hat) / nrow(data)
+hat[hat > threshold]
+```
+## Task 5
+Collecting data:
+```{r}
+file <- "strongx.txt"
+data <- read.table(file, header = T)
+```
+### a) LS fit
+```{r}
+fitLS <- lm(crossx ~ energy, data = data)
+```
+### b) WLS fit
+```{r}
+fitWLS <- lm(crossx ~ energy, weights = sd^-2, data = data)
+```
+### c) Models comparison
+Models output:
+```{r}
+summary(fitLS)
+summary(fitWLS)
+```
+Diagnostic plots:
+```{r}
+par(mfrow = c(2, 2))
+plot(fitLS)
+plot(fitWLS)
+```
+
+We can see that the **WLS model (green in the plot below)** has less scattered residuals for small `energy` values (these are actualy small values of the inverse of the energy) than the **LS model (red)**.
+```{r}
+plot(data$energy, fitLS$residuals, ylim = c(-15, 35), col = 2,
+     main = "Residuals of LS and WLS models")
+points(data$energy, fitWLS$residuals, col = 3)
+abline(h = 0, lty = 2)
+```
+
+We can explain this by pointing to the fact that observations with high `energy` have also high values of estimated standard deviation (see the plot below). It means that these observations are multiplied by relativaly smaller weights and *so the observations with low `energy` values have stronger impact on the regression line leading to a better fit for them*.
+```{r}
+plot(data$energy, data$sd,
+     main = "Estimated standard deviation")
+```
+
+### d) Modification - WLS2 model
+The residual plot shows nonlinearity: a convex depenence of actual `crossx` values not caught by the regression on `energy`. Thus we could **include square values of `energy`** to account for this dependence:
+```{r}
+fitWLS2 <- lm(crossx ~ energy + I(energy^2), weights = sd^-2, data = data)
+summary(fitWLS2)
+```
+We see the squared term is significant, the adjusted $R^2$ is $99\%$, so much better than the previous WLS model ($93\%$).
+
+The diagnostic plots:
+```{r}
+par(mfrow = c(2, 2))
+plot(fitWLS2)
+```
+
+The plots show that there are still many problems with the fit.
+
+### e) Drawing fitted curves
+```{r}
+par(mfrow = c (1, 1))
+plot(data$energy, data$crossx,
+     main = "Fitted curves of all three models")
+lines(data$energy, fitLS$fitted.values, col = 2)
+lines(data$energy, fitWLS$fitted.values, col = 3)
+lines(data$energy, fitWLS2$fitted.values, col = 4)
+legend(x = 0.06, y = 350,
+       legend=c("LS", "WLS", "WLS2"),
+       lty = 1, col = 2:4)
+```

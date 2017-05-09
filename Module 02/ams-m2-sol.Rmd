@@ -1,0 +1,231 @@
+---
+title: "ASM - Module 2 Solutions"
+author: "Michal Siwek"
+date: "Monday, October 26, 2015"
+output:
+    pdf_document:
+        fig_width: 6
+        fig_height: 3
+---
+
+## Task 2
+### Scatter plots of the two pairs of variables
+Volume and Girth, Volume and Height:
+```{r}
+attach(trees)
+par(mfrow = c(1, 2))
+plot(Girth, Volume)
+plot(Height, Volume)
+```
+
+### The empirical correlation coeffcient and the empirical Spearman's rank correlation coeffcient
+for the two pairs of variables:
+```{r}
+cor(Girth, Volume)  # pearson is the default method
+cor(Girth, Volume, method = "spearman")
+cor(Height, Volume)
+cor(Height, Volume, method = "spearman")
+```
+
+### Correlation tests of independence
+based on Pearson's $r$ coeffcient and Spearman's $\rho$ coefficient at a significance level $0.05$ for:  
+... Volume and Girth:
+```{r}
+cor.test(Girth, Volume)  # the default method is pearson, the significance level is 0.05
+cor.test(Girth, Volume, method = "spearman")
+```
+
+... and Volume and Height:
+```{r}
+cor.test(Height, Volume)
+cor.test(Height, Volume, method = "spearman")
+detach(trees)
+```
+
+We see that the tests give as the same point values as when using just the measure functions. Tests give us additional information on the certianty level (p-values, confidence intervals).
+
+## Task 3
+Examining dependence between education of patients and their marital status.
+
+### Represent the data as a contingency table
+```{r}
+file <- "patients.txt"
+data <- read.table(file, header = T)
+attach(data)
+table(education, marital)
+```
+### Perform chi-square test for independence
+```{r}
+test <- chisq.test(education, marital)
+test
+```
+
+P-value is too high to reject the null hypothesis.
+
+Redoing the test step by step gives us the same result:
+```{r}
+t <- table(education, marital)
+n <- sum(t)
+edu_marg <- apply(t, 1, sum)/n
+mar_marg <- apply(t, 2, sum)/n
+exp_counts <- n * edu_marg %o% mar_marg   # the same as outer()
+q_squared <- sum((t - exp_counts)^2 / exp_counts)
+df <- prod(dim(t) - 1)
+1 - pchisq(q_squared, df)
+```
+
+### Analyse Pearson residuals and relate them with the test result
+```{r}
+test$residuals
+```
+
+The null hypothesis (i.e. no dependence between marital status and education) underestimates the probability of having only elementary education for ivolved people, and having secondary education for single people.The actual probabilities for having the university degree are in perfect agreement with the null hypothesis, the probabilitis for vocational education are close to the null hypothesis expectation.  
+It means that "university" and "vocational" is responsible for maintaining the null hypothiesis. To confirm that let's apply the chi-squared dependence test for "elementary" and "secondary" education (we expect to see some dependence) and separately for "university" and "vocational" education (we expect independence result):
+```{r}
+df <- subset(data,
+       education %in% c("elementary", "secondary"),
+       select = c(education, marital))
+chisq.test(df$education, df$marital)
+df <- subset(data,
+       education %in% c("university", "vocational"),
+       select = c(education, marital))
+chisq.test(df$education, df$marital)
+```
+
+Our expectations are confirmed - null hypothesis rejected for the first pair of education levels and marital status, and not rejected for the second par of education levels and marital status.
+
+### Perform chi-square independence tests for subgroups of men and women separately
+```{r}
+sub_male <- data[data$gender == "male",]
+sub_female <- data[data$gender == "female",]
+test_male <- chisq.test(sub_male$education, sub_male$marital)
+test_female <- chisq.test(sub_female$education, sub_female$marital)
+```
+
+Let's check the minimal expected counts for sub group tests:
+```{r}
+min(test_male$expected)
+min(test_female$expected)
+```
+
+We see that the minimal expected counts are low and for the female subgroup the minimal expected count is below 5. We shouldn't rely on the chi-square approximation for this test.
+
+Test results:
+```{r}
+test_male
+test_female
+```
+
+P-values are too high to reject the null hypothesis.
+
+### Perform Fisher test for independence
+```{r}
+fisher.test(education, marital)
+detach(data)
+```
+
+Also here we see the p-value is too high to reject the null hypothesis.
+
+## Task 4
+### Do answers concerning importance of looks depend on the gender of the questioned?
+Perform an appropriate test and interpret its result.
+Gender is a categorical variable while Looks is an ordinal variable. To appropriately test for dependence between these variables we should use a test for ordinal data.  
+Let's compute the Goodman-Kruskal's $\hat \gamma$ statistic:
+```{r}
+file <- "kids.txt"
+data <- read.table(file, header = T)
+attach(data)
+t <- table(Gender, Looks)  # contingency table 2 x 4
+c <- sum(t[1, 1] * t[2, 2:4]) +  # numb. of concordant pairs
+    sum(t[1, 2] * t[2, 3:4]) +
+    t[1, 3] * t[2, 4]
+d <- sum(t[2, 1] * t[1, 2:4]) +  # numb. of discordant pairs
+    sum(t[2, 2] * t[1, 3:4]) +
+    t[2, 3] * t[1, 4]
+goodman_kruskal_gamma <- (c - d) / (c + d)
+goodman_kruskal_gamma
+```
+
+The result of $-0.54$ suggest a negative dependence - for boys looks are less important than for girls.  
+Also if we treat the Looks as cardinal variable we would get tests for dependence with low p-values, e.g. Fisher test and Chi-square test:
+```{r}
+fisher.test(Gender, Looks)
+chisq.test(Gender, Looks)
+```
+
+### What measures of dependence may be used in this situation?
+We should use measures of dependence for ordinal data, to account for the facts that looks are ordinal.
+
+### The Gini index for variable Looks
+```{r}
+n <- length(Looks)
+t <- table(Looks)
+p <- t / n
+V_looks <- 1 - sum(p^2)
+V_looks
+```
+
+The gini index is actually quite high, one can compare it with the maximal value for uniform distribution:
+```{r}
+l <- length(t)
+1 - 1/l
+```
+
+### The Goodman-Kruskal dependence index $\tau$ for Gender and Looks
+This test is design for categorical data so it doesn't take into account the ordinal character of Looks variable.
+````{r}
+t <- table(Gender, Looks)
+p <- t / n
+p_marg_gender <- apply(t, 1, sum) / n
+p_cond_looks_on_gender <- p / p_marg_gender
+V_cond_looks_on_gender <- 1 - apply((p_cond_looks_on_gender)^2, 1, sum)
+V_looks_expt <- sum(p_marg_gender * V_cond_looks_on_gender)
+Goodman_Kruskal_tau <- (V_looks - V_looks_expt) / V_looks
+Goodman_Kruskal_tau
+```
+
+This is a very low value. This suggest only a slight dependence. I'm not sure how to square this result with the previous results, where a strong dependence was found.
+
+```{r}
+# from the official solutions:
+# Goodman-Kruskal dependence index - relative decrease of variability of Y
+# given knowledge of X
+t <- table(Gender, Looks)
+n <- sum(t)
+n1 <- sum(t[1, ])
+n2 <- sum(t[2, ])
+# Average value of conditional Gini index:
+avg_cond_gini <- 1 - (sum(t[1, ]^2) / n1 + sum(t[2, ]^2) / n2) / n  # V looks expected
+avg_cond_gini
+# Goodman-Kruskal tau:
+1 - avg_cond_gini/V_looks
+```
+
+### Kendall's $\tau$ coefficient
+for all pairs of ordered variables which are present in the data set:
+```{r}
+# for one pair you can use:
+cor(Looks, Money, method = "kendall")
+
+# for all pairs & using the Kendall library:
+
+library(Kendall)
+df <- subset(data, select = c(Grades, Sports, Looks, Money))
+n <- ncol(df)
+tab <- outer(1:n, 1:n, Vectorize(function(i, j) {
+    Kendall(df[, i], df[, j])$tau
+}))
+rownames(tab) <- c("Grades", "Sports", "Looks", "Money")
+colnames(tab) <- c("Grades", "Sports", "Looks", "Money")
+tab
+
+# the same a bit longer:
+
+Kendall_i_j <- function(i,j,data) {Kendall(data[,i],data[,j])$tau}
+Kendall_tau <- Vectorize(Kendall_i_j, vectorize.args=list("i","j"))
+tab <- outer(1:n, 1:n, Kendall_tau, data=df)
+rownames(tab) <- c("Grades", "Sports", "Looks", "Money")
+colnames(tab) <- c("Grades", "Sports", "Looks", "Money")
+tab
+detach(data)
+```
